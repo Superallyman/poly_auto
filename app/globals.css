@@ -1,26 +1,46 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: #F8F9FA;
+  --foreground: #2F3E46;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #1A1B26;
+    --foreground: #F8F9FA;
   }
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--background);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Add some cooking-themed utility classes */
+@layer components {
+  .recipe-card {
+    @apply bg-white dark:bg-neutral-dark rounded-lg shadow-sm border border-primary/10 dark:border-primary/20 transition-all duration-300 hover:shadow-md;
+  }
+  
+  .cooking-button {
+    @apply bg-primary hover:bg-primary-dark text-white rounded-lg transition-all duration-300 transform hover:scale-102 active:scale-98;
+  }
+  
+  .accent-button {
+    @apply bg-secondary hover:bg-secondary-dark text-white rounded-lg transition-all duration-300;
+  }
+}
+
+/* Hide scrollbar styles */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
