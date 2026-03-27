@@ -57,16 +57,10 @@ export default function TopBar() {
           <div className="max-w-7xl mx-auto flex justify-between items-center px-4 py-3">
             <Link
               href="/"
-              className="text-md sm:text-lg font-medium text-text dark:text-text-dark flex items-center gap-2 hover:opacity-80 transition-opacity">
+              className=" hover:opacity-80 transition-opacity">
               {" "}
-              <Image
-                src="/brainIcon.png" // Path to your favicon.ico
-                alt="PatientEducator Logo"
-                width={50} // Set the desired width
-                height={50} // Set the desired height (should be same as width for square icons)
-                className="rounded-full" // Example: Add some styling like rounded corners
-              />
-              <span className="font-sans">PatientEducator.net</span>
+
+              <span style={{ width: "50px", height: "auto" }} className="font-sans">🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️🌡️</span>
             </Link>
 
             <div className="flex items-center gap-4">
@@ -95,30 +89,7 @@ export default function TopBar() {
                 </button>
               )} */}
 
-                  {pathname === "/" ? (
-                    <Link
-                      href="/"
-                      className="hidden sm:inline-block px-4 py-2 bg-primary-dark text-white rounded-full text-sm font-semibold transition-colors shadow-hover border-2 border-white" >                      Report Generator
-                    </Link>
-                  ) : (
-                    <Link
-                      href="/"
-                      className="hidden sm:inline-block px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-full text-sm font-medium transition-colors shadow-subtle hover:shadow-hover">
-                      Report Generator
-                    </Link>
-                  )}
-                  {pathname === "/topics" ? (
-                    <Link
-                      href="/topics"
-                      className="hidden sm:inline-block px-4 py-2 bg-primary-dark text-white rounded-full text-sm font-semibold transition-colors shadow-hover border-2 border-white" >                      Edit Topics
-                    </Link>
-                  ) : (
-                    <Link
-                      href="/topics"
-                      className="hidden sm:inline-block px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-full text-sm font-medium transition-colors shadow-subtle hover:shadow-hover">
-                      Edit Topics
-                    </Link>
-                  )}
+
 
                   {pathname === "/profiledata" ? (
                     <Link

@@ -26,17 +26,9 @@ export function LoginForm({ onSubmit, onGoogleSignIn, isLoading, error }: LoginF
     <div className="w-full space-y-8 p-8 bg-surface-light dark:bg-surface-dark rounded-2xl shadow-subtle border border-gray-200 dark:border-gray-700">
       <div className="text-center">
         <div className="flex items-center justify-center gap-2 mb-6">
-          {/* <span className="text-3xl">🎬</span> */}
-          <Image
-            src="/brainIcon.png" // Path to your favicon.ico
-            alt="PatientEducator Logo"
-            width={50} // Set the desired width
-            height={50} // Set the desired height (should be same as width for square icons)
-            className="rounded-full" // Example: Add some styling like rounded corners
-          ></Image>
-          <h2 className="text-2xl font-medium text-text dark:text-text-dark">PatientEducator.net</h2>
+          <span className="text-3xl">🌡️</span>
+          <h2 className="text-2xl font-medium text-text dark:text-text-dark">TEMPERATURE GUESSER</h2>
         </div>
-          <h4 className="text-sm font-medium text-text dark:text-text-dark">Easily Accessible and Persistent Patient Education</h4>
       </div>
 
       {error && <div className="text-red-500 text-center">{error}</div>}
