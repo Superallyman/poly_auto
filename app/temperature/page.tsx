@@ -1,56 +1,86 @@
+// temperature/page.tsx
+
+import React from 'react';
 import { headers } from 'next/headers';
 
-// ─── Types matching the route.ts response shape ───────────────────────────────
-interface SourceCurrent {
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface CurrentTemp {
   source: string;
   temp: number | null;
+  note?: string;
   error?: string;
 }
 
 interface SourcePrediction {
   source: string;
   maxTemp: number | null;
+  deltaVsWu: number | null;
   error?: string;
 }
 
 interface DayForecast {
   date: string;
   label: string;
-  predictions: SourcePrediction[];
+  wunderground: { maxTemp: number | null; note?: string };
+  otherSources: SourcePrediction[];
   consensus: number | null;
+  consensusDeltaVsWu: number | null;
+}
+
+interface WuMeta {
+  hoursCount: number;
+  totalDaysAvailable: number;
+  daysDisplayed: number;
+  countWarning: string | null;
+  error?: string;
 }
 
 interface TemperatureReport {
   location: string;
   coordinates: { lat: number; lon: number };
   generatedAt: string;
-  currentTemps: SourceCurrent[];
+  londonToday: string;
+  wundergroundMeta: WuMeta;
+  currentTemps: CurrentTemp[];
   days: DayForecast[];
 }
 
-// ─── Small display helpers ────────────────────────────────────────────────────
-function fmt(val: number | null): string {
-  return val !== null ? `${val}°C` : 'N/A';
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = (v: number | null) => (v !== null ? `${v}°C` : '—');
+
+function fmtDelta(d: number | null) {
+  if (d === null) return '—';
+  return `${d > 0 ? '+' : ''}${d}°C`;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+function formatDateShort(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB', {
+    timeZone: 'UTC',
+    weekday: 'short', day: 'numeric', month: 'short',
   });
 }
 
-function formatGenerated(iso: string): string {
+function formatGenerated(iso: string) {
   return new Date(iso).toLocaleString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZoneName: 'short',
+    timeZone: 'Europe/London',
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
   });
+}
+
+function deltaColor(d: number | null): string {
+  if (d === null) return '#999';
+  if (Math.abs(d) <= 0.5) return '#155724';
+  if (Math.abs(d) <= 1.5) return '#856404';
+  return '#721c24';
+}
+
+function deltaBg(d: number | null): string {
+  if (d === null) return 'transparent';
+  if (Math.abs(d) <= 0.5) return '#d4edda';
+  if (Math.abs(d) <= 1.5) return '#fff3cd';
+  return '#f8d7da';
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -60,62 +90,68 @@ export default async function TemperaturePage() {
 
   let data: TemperatureReport;
   try {
-    const res = await fetch(`${protocol}://${host}/api/temperature`, {
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error(`API responded with status ${res.status}`);
+    const res = await fetch(`${protocol}://${host}/api/temperature`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`API status ${res.status}`);
     data = await res.json();
   } catch (err: any) {
     return (
-      <main style={styles.main}>
-        <h1 style={styles.h1}>⚠ System Error</h1>
-        <p style={styles.errorMsg}>
-          The temperature API returned an invalid response.
-          <br />
+      <main style={s.main}>
+        <h1 style={s.h1}>⚠ System Error</h1>
+        <p style={s.errorBox}>
+          The temperature API returned an invalid response.<br />
           <small>{err?.message}</small>
         </p>
       </main>
     );
   }
 
+  // Safety check to prevent the "Cannot read properties of undefined" bug
+  const days = data?.days ?? [];
+  const wuMeta = data?.wundergroundMeta ?? ({} as WuMeta);
+  const otherSourceNames = days[0]?.otherSources.map((o) => o.source) ?? [];
+
   return (
-    <main style={styles.main}>
-      {/* ── Header ── */}
-      <header style={styles.header}>
-        <h1 style={styles.h1}>🌡 Temperature Forecast Report</h1>
-        <p style={styles.subtitle}>
+    <main style={s.main}>
+      <header style={s.header}>
+        <h1 style={s.h1}>🌡 Temperature Forecast Report</h1>
+        <p style={s.subtitle}>
           <strong>{data.location}</strong>
-          &nbsp;&nbsp;·&nbsp;&nbsp;
-          {data.coordinates.lat}°N, {data.coordinates.lon}°E
+          &nbsp;·&nbsp;{data.coordinates.lat}°N, {data.coordinates.lon}°E
         </p>
-        <p style={styles.meta}>Generated: {formatGenerated(data.generatedAt)}</p>
+        <p style={s.meta}>
+          Generated: {formatGenerated(data.generatedAt)}
+          &nbsp;·&nbsp;London date: <strong>{data.londonToday}</strong>
+        </p>
       </header>
 
-      {/* ── Section 1 — Current Temperatures ── */}
-      <section style={styles.section}>
-        <h2 style={styles.h2}>1. Current Temperature</h2>
-        <p style={styles.sectionNote}>
-          Live readings from each data source right now.
-        </p>
-        <table style={styles.table}>
+      {(wuMeta.error || wuMeta.countWarning) ? (
+        <div style={s.warnBanner}>
+          <strong>⚠ Wunderground issue:</strong> {wuMeta.error ?? wuMeta.countWarning}
+        </div>
+      ) : (
+        <div style={s.okBanner}>
+          ✓ Wunderground: {wuMeta.hoursCount} hourly values confirmed
+          ({wuMeta.totalDaysAvailable} days available, showing {wuMeta.daysDisplayed})
+        </div>
+      )}
+
+      <section style={s.section}>
+        <h2 style={s.h2}>Current Temperature</h2>
+        <table style={s.table}>
           <thead>
             <tr>
-              <th style={styles.th}>Source</th>
-              <th style={styles.th}>Current Temp</th>
-              <th style={styles.th}>Status</th>
+              <th style={s.th}>Source</th>
+              <th style={s.th}>Temp</th>
+              <th style={s.th}>Detail</th>
             </tr>
           </thead>
           <tbody>
-            {data.currentTemps.map((s) => (
-              <tr key={s.source} style={styles.tr}>
-                <td style={styles.td}>{s.source}</td>
-                <td style={{ ...styles.td, ...styles.tempCell }}>{fmt(s.temp)}</td>
-                <td style={styles.td}>
-                  {s.error ? (
-                    <span style={styles.errorBadge}>⚠ {s.error}</span>
-                  ) : (
-                    <span style={styles.okBadge}>✓ OK</span>
-                  )}
+            {(data.currentTemps ?? []).map((c, i) => (
+              <tr key={c.source} style={i === 0 ? { ...s.tr, background: '#fff8e1' } : s.tr}>
+                <td style={s.td}><strong>{c.source}</strong></td>
+                <td style={{ ...s.td, ...s.tempCell }}>{fmt(c.temp)}</td>
+                <td style={{ ...s.td, fontSize: '0.8rem', color: '#555' }}>
+                  {c.error ? <span style={s.errBadge}>⚠ {c.error}</span> : c.note ?? <span style={s.okBadge}>✓</span>}
                 </td>
               </tr>
             ))}
@@ -123,212 +159,131 @@ export default async function TemperaturePage() {
         </table>
       </section>
 
-      {/* ── Section 2 — Daily Max Forecasts ── */}
-      <section style={styles.section}>
-        <h2 style={styles.h2}>2. Predicted High Temperatures</h2>
-        <p style={styles.sectionNote}>
-          Forecast maximum temperatures for today, tomorrow, and the day after.
-          Consensus is the simple average of available sources.
-        </p>
-
-        {data.days.map((day, i) => (
-          <div key={day.date} style={styles.dayCard}>
-            <div style={styles.dayHeader}>
-              <span style={styles.dayLabel}>
-                {i === 0 ? '📅 Today' : i === 1 ? '📅 Tomorrow' : '📅 2 Days From Now'}
-              </span>
-              <span style={styles.dayDate}>{formatDate(day.date)}</span>
-              {day.consensus !== null && (
-                <span style={styles.consensusBadge}>
-                  Consensus: {fmt(day.consensus)}
-                </span>
-              )}
-            </div>
-
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Source</th>
-                  <th style={styles.th}>Predicted High</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {day.predictions.map((p) => (
-                  <tr key={p.source} style={styles.tr}>
-                    <td style={styles.td}>{p.source}</td>
-                    <td style={{ ...styles.td, ...styles.tempCell }}>
-                      {fmt(p.maxTemp)}
-                    </td>
-                    <td style={styles.td}>
-                      {p.error ? (
-                        <span style={styles.errorBadge}>⚠ {p.error}</span>
-                      ) : p.maxTemp !== null ? (
-                        <span style={styles.okBadge}>✓ OK</span>
-                      ) : (
-                        <span style={styles.warnBadge}>— No data</span>
-                      )}
-                    </td>
-                  </tr>
+      <section style={s.section}>
+        <h2 style={s.h2}>10-Day Predicted High — Wunderground vs Other Sources</h2>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ ...s.table, minWidth: 700 }}>
+            <thead>
+              <tr>
+                <th style={{ ...s.th, minWidth: 110 }}>Day</th>
+                <th style={{ ...s.th, ...s.wuHeadCell, textAlign: 'center' }}>Wunderground</th>
+                {otherSourceNames.map((name) => (
+                  <th key={name} style={{ ...s.th, textAlign: 'center' }} colSpan={2}>{name}</th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
+                <th style={{ ...s.th, textAlign: 'center' }} colSpan={2}>Consensus</th>
+              </tr>
+              <tr style={{ background: '#f8f9fa' }}>
+                <th style={s.subTh} />
+                <th style={{ ...s.subTh, background: '#fff8e1' }}>°C</th>
+                {otherSourceNames.map((name) => (
+                  <React.Fragment key={name}>
+                    <th style={s.subTh}>°C</th>
+                    <th style={s.subTh}>Δ</th>
+                  </React.Fragment>
+                ))}
+                <th style={s.subTh}>°C</th>
+                <th style={s.subTh}>Δ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {days.map((day, i) => (
+                <tr key={day.date} style={{ ...s.tr, background: i === 0 ? '#fffbf0' : i % 2 === 0 ? '#fafbfd' : '#fff', fontWeight: i === 0 ? 700 : 400 }}>
+                  <td style={s.td}>
+                    <div style={{ fontWeight: 700 }}>{day.label}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#888' }}>{formatDateShort(day.date)}</div>
+                    {day.wunderground.note && <div style={{ fontSize: '0.68rem', color: '#aaa' }}>{day.wunderground.note}</div>}
+                  </td>
+                  <td style={{ ...s.td, ...s.wuTempCell }}>{fmt(day.wunderground.maxTemp)}</td>
+                  {day.otherSources.map((p) => (
+                    <React.Fragment key={p.source}>
+                      <td style={{ ...s.td, ...s.tempCell }}>{p.error ? <span style={s.errBadge}>⚠</span> : fmt(p.maxTemp)}</td>
+                      <td style={{ ...s.td, fontWeight: 700, textAlign: 'center', color: deltaColor(p.deltaVsWu), background: deltaBg(p.deltaVsWu) }}>{fmtDelta(p.deltaVsWu)}</td>
+                    </React.Fragment>
+                  ))}
+                  <td style={{ ...s.td, ...s.tempCell }}>{fmt(day.consensus)}</td>
+                  <td style={{ ...s.td, fontWeight: 700, textAlign: 'center', color: deltaColor(day.consensusDeltaVsWu), background: deltaBg(day.consensusDeltaVsWu) }}>{fmtDelta(day.consensusDeltaVsWu)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
-
-      <footer style={styles.footer}>
-        Data sources: Open-Meteo · OpenWeatherMap · WeatherAPI.com
-      </footer>
+      <footer style={s.footer}> Ground truth: Wunderground (EGLC) · Supporting: Open-Meteo, OpenWeatherMap, WeatherAPI </footer>
     </main>
   );
 }
 
-// ─── Inline styles (no external CSS dependency) ───────────────────────────────
-const styles: Record<string, React.CSSProperties> = {
+// ... Keep existing styles 's' object as provided in original prompt ...
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const s: Record<string, React.CSSProperties> = {
   main: {
     fontFamily: "'Segoe UI', Arial, sans-serif",
-    maxWidth: 720,
+    maxWidth: 1020,
     margin: '0 auto',
     padding: '2rem 1.5rem',
-    color: '#1a1a2e',
     background: '#f4f7fc',
     minHeight: '100vh',
+    color: '#1a1a2e',
   },
   header: {
-    background: '#1a1a2e',
-    color: '#e8f0fe',
-    borderRadius: 10,
-    padding: '1.5rem 2rem',
-    marginBottom: '2rem',
+    background: '#1a1a2e', color: '#e8f0fe',
+    borderRadius: 10, padding: '1.5rem 2rem', marginBottom: '1rem',
   },
-  h1: {
-    margin: 0,
-    fontSize: '1.6rem',
-    fontWeight: 700,
-    color: 'inherit',
+  h1: { margin: 0, fontSize: '1.6rem', fontWeight: 700, color: 'inherit' },
+  subtitle: { margin: '0.4rem 0 0.2rem', fontSize: '1rem', opacity: 0.85 },
+  meta: { margin: 0, fontSize: '0.78rem', opacity: 0.55 },
+  okBanner: {
+    background: '#d4edda', color: '#155724', borderRadius: 7,
+    padding: '0.5rem 1rem', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 600,
   },
-  subtitle: {
-    margin: '0.5rem 0 0.25rem',
-    fontSize: '1rem',
-    opacity: 0.85,
-  },
-  meta: {
-    margin: 0,
-    fontSize: '0.8rem',
-    opacity: 0.6,
+  warnBanner: {
+    background: '#f8d7da', color: '#721c24', borderRadius: 7,
+    padding: '0.5rem 1rem', marginBottom: '1rem', fontSize: '0.85rem',
   },
   section: {
-    background: '#ffffff',
-    borderRadius: 10,
-    padding: '1.5rem',
-    marginBottom: '1.5rem',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+    background: '#fff', borderRadius: 10, padding: '1.5rem',
+    marginBottom: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
   },
-  h2: {
-    margin: '0 0 0.25rem',
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    color: '#1a1a2e',
-  },
-  sectionNote: {
-    margin: '0 0 1rem',
-    fontSize: '0.85rem',
-    color: '#666',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: '0.9rem',
-  },
+  h2: { margin: '0 0 0.25rem', fontSize: '1.05rem', fontWeight: 700 },
+  note: { margin: '0 0 1rem', fontSize: '0.82rem', color: '#666' },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' },
   th: {
-    textAlign: 'left',
-    padding: '0.5rem 0.75rem',
-    borderBottom: '2px solid #e0e7ef',
-    color: '#555',
-    fontWeight: 600,
-    fontSize: '0.8rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+    textAlign: 'left', padding: '0.45rem 0.6rem',
+    borderBottom: '2px solid #e0e7ef', color: '#444',
+    fontWeight: 700, fontSize: '0.75rem',
+    textTransform: 'uppercase', letterSpacing: '0.03em',
+    background: '#f0f4fb',
   },
-  tr: {
-    borderBottom: '1px solid #f0f0f0',
+  wuHeadCell: { background: '#fff8e1', color: '#7b5800' },
+  subTh: {
+    textAlign: 'center', padding: '0.25rem 0.5rem',
+    borderBottom: '1px solid #e0e7ef',
+    color: '#888', fontSize: '0.68rem', fontWeight: 600,
+    background: '#f8f9fa',
   },
-  td: {
-    padding: '0.55rem 0.75rem',
-    verticalAlign: 'middle',
-  },
+  tr: { borderBottom: '1px solid #f0f0f0' },
+  td: { padding: '0.5rem 0.6rem', verticalAlign: 'middle' },
   tempCell: {
-    fontWeight: 700,
-    fontSize: '1rem',
-    color: '#1a6eb5',
+    fontWeight: 700, fontSize: '0.95rem', color: '#1a6eb5',
+    textAlign: 'center' as const,
+  },
+  wuTempCell: {
+    fontWeight: 800, fontSize: '1rem', color: '#e65100',
+    textAlign: 'center' as const, background: '#fff8e1',
   },
   okBadge: {
-    background: '#d4edda',
-    color: '#155724',
-    borderRadius: 4,
-    padding: '2px 8px',
-    fontSize: '0.75rem',
-    fontWeight: 600,
+    background: '#d4edda', color: '#155724',
+    borderRadius: 4, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 600,
   },
-  errorBadge: {
-    background: '#f8d7da',
-    color: '#721c24',
-    borderRadius: 4,
-    padding: '2px 8px',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-  },
-  warnBadge: {
-    background: '#fff3cd',
-    color: '#856404',
-    borderRadius: 4,
-    padding: '2px 8px',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-  },
-  dayCard: {
-    border: '1px solid #e0e7ef',
-    borderRadius: 8,
-    marginBottom: '1rem',
-    overflow: 'hidden',
-  },
-  dayHeader: {
-    background: '#eef2fb',
-    padding: '0.65rem 0.75rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    flexWrap: 'wrap',
-  },
-  dayLabel: {
-    fontWeight: 700,
-    fontSize: '0.95rem',
-    color: '#1a1a2e',
-  },
-  dayDate: {
-    fontSize: '0.85rem',
-    color: '#555',
-    flex: 1,
-  },
-  consensusBadge: {
-    background: '#1a6eb5',
-    color: '#fff',
-    borderRadius: 20,
-    padding: '2px 12px',
-    fontSize: '0.82rem',
-    fontWeight: 700,
+  errBadge: {
+    background: '#f8d7da', color: '#721c24',
+    borderRadius: 4, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 600,
   },
   footer: {
-    textAlign: 'center',
-    fontSize: '0.78rem',
-    color: '#999',
-    marginTop: '1.5rem',
+    textAlign: 'center' as const, fontSize: '0.75rem',
+    color: '#aaa', marginTop: '1.5rem',
   },
-  errorMsg: {
-    color: '#721c24',
-    background: '#f8d7da',
-    padding: '1rem',
-    borderRadius: 8,
+  errorBox: {
+    background: '#f8d7da', color: '#721c24', padding: '1rem', borderRadius: 8,
   },
 };
