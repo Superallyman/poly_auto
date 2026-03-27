@@ -39,7 +39,7 @@
     ".next/types/**/*.ts",
     "types/**/*.d.ts",
     ".next/dev/types/**/*.ts"
-  ],
+, "app/text_editor/page.js"  ],
   "exclude": [
     "node_modules"
   ]
